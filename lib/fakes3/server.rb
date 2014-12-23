@@ -139,8 +139,6 @@ module FakeS3
     end
 
     def do_PUT(request,response)
-      response['Access-Control-Allow-Origin'] = '*' if request['Origin']
-
       s_req = normalize_request(request)
       query = CGI::parse(request.request_uri.query || "")
 
@@ -169,14 +167,6 @@ module FakeS3
       end
     end
 
-<<<<<<< HEAD
-    def do_POST(request,response)
-      response['Access-Control-Allow-Origin'] = '*' if request['Origin']
-
-      # check that we've received file data
-      unless request.content_type =~ /^multipart\/form-data; boundary=(.+)/
-        raise WEBrick::HTTPStatus::BadRequest
-=======
     def do_multipartPUT(request, response)
       s_req = normalize_request(request)
       query = CGI::parse(request.request_uri.query)
@@ -204,11 +194,10 @@ module FakeS3
 
         response.body   = ""
         response.header['ETag']  = "\"#{real_obj.md5}\""
->>>>>>> FETCH_HEAD
       end
 
       response['Access-Control-Allow-Origin']   = '*'
-      response['Access-Control-Allow-Headers']  = 'Authorization, Content-Length'
+      response['Access-Control-Allow-Headers']  = 'Authorization, Content-Length, Content-Type'
       response['Access-Control-Expose-Headers'] = 'ETag'
 
       response.status = 200
@@ -306,7 +295,7 @@ module FakeS3
       super
       response['Access-Control-Allow-Origin']   = '*'
       response['Access-Control-Allow-Methods']  = 'PUT, POST, HEAD, GET, OPTIONS'
-      response['Access-Control-Allow-Headers']  = 'X-AMZ-ACL, X-AMZ-EXPIRES, X-AMZ-DATE, Authorization, Content-Length, ETag'
+      response['Access-Control-Allow-Headers']  = 'X-AMZ-ACL, X-AMZ-EXPIRES, X-AMZ-DATE, Authorization, Content-Length, Content-Type, ETag'
       response['Access-Control-Expose-Headers'] = 'ETag'
     end
 
