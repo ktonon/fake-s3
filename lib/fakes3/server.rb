@@ -51,6 +51,7 @@ module FakeS3
     end
 
     def do_GET(request, response)
+      response['Access-Control-Allow-Origin'] = '*' if request['Origin']
       s_req = normalize_request(request)
 
       case s_req.type
@@ -88,21 +89,6 @@ module FakeS3
           response.body = XmlAdapter.error_no_such_key(s_req.object)
           response['Content-Type'] = "application/xml"
           return
-        end
-
-        if_none_match = request["If-None-Match"]
-        if if_none_match == "\"#{real_obj.md5}\"" or if_none_match == "*"
-          response.status = 304
-          return
-        end
-
-        if_modified_since = request["If-Modified-Since"]
-        if if_modified_since
-          time = Time.httpdate(if_modified_since)
-          if time >= Time.iso8601(real_obj.modified_date)
-            response.status = 304
-            return
-          end 
         end
 
         response.status = 200
@@ -151,6 +137,8 @@ module FakeS3
     end
 
     def do_PUT(request,response)
+      response['Access-Control-Allow-Origin'] = '*' if request['Origin']
+
       s_req = normalize_request(request)
 
       response.status = 200
@@ -176,6 +164,8 @@ module FakeS3
     end
 
     def do_POST(request,response)
+      response['Access-Control-Allow-Origin'] = '*' if request['Origin']
+
       # check that we've received file data
       unless request.content_type =~ /^multipart\/form-data; boundary=(.+)/
         raise WEBrick::HTTPStatus::BadRequest
@@ -216,6 +206,7 @@ module FakeS3
     end
 
     def do_DELETE(request,response)
+      response['Access-Control-Allow-Origin'] = '*' if request['Origin']
       s_req = normalize_request(request)
 
       case s_req.type
@@ -233,6 +224,8 @@ module FakeS3
     def do_OPTIONS(request, response)
       super
       response["Access-Control-Allow-Origin"]="*"
+      response['Access-Control-Allow-Headers']="x-amz-acl,x-amz-expires,x-amz-date,authorization,content-type"
+
     end
 
     private
