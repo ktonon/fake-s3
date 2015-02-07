@@ -9,7 +9,7 @@ looking to duplicate S3 functionality.  Trying RiakCS, ParkPlace/Boardwalk, or
 Ceph might be a place to start if that is your goal.
 
 FakeS3 doesn't support all of the S3 command set, but the basic ones like put, get,
-list, copy, and make bucket are supported.  More coming soon.
+list, copy, and make bucket are supported. Multipart uploads are also supported. More coming soon.
 
 ## Installation
 
