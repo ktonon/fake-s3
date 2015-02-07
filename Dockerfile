@@ -11,6 +11,6 @@ RUN bundle install
 RUN mkdir -p /var/data/fakes3
 ADD . /opt/fakes3
 
-EXPOSE 80
+EXPOSE 10001
 
-CMD ["/opt/fakes3/bin/fakes3", "-r", "/var/data/fakes3", "-p", "80"]
+CMD ["/opt/fakes3/bin/fakes3", "-r", "/var/data/fakes3", "-p", "10001"]
