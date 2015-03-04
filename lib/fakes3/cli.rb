@@ -52,6 +52,15 @@ module FakeS3
         abort "If you specify an SSL certificate you must also specify an SSL certificate key"
       end
 
+      if ENV['FAKE_S3_BUCKETS']
+        ENV['FAKE_S3_BUCKETS'].split(',').each do |bucket|
+          unless store.get_bucket(bucket)
+            puts "Creating FakeS3 bucket: #{bucket}"
+            store.create_bucket(bucket)
+          end
+        end
+      end
+
       puts "Loading FakeS3 with #{root} on port #{options[:port]} with hostname #{hostname}"
       server = FakeS3::Server.new(address,options[:port],store,hostname,ssl_cert_path,ssl_key_path)
       server.serve
