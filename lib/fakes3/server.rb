@@ -488,6 +488,7 @@ module FakeS3
       @ssl_key_path = ssl_key_path
       webrick_config = {
         :BindAddress => @address,
+        :DoNotReverseLookup => true,
         :Port => @port
       }
       if !@ssl_cert_path.to_s.empty?
