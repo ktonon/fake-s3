@@ -129,6 +129,10 @@ module FakeS3
           response.header['x-amz-meta-' + header] = value
         end
 
+        if real_obj.content_disposition
+          response['Content-Disposition'] = real_obj.content_disposition
+        end
+
         content_length = stat.size
 
         # Added Range Query support
@@ -245,6 +249,10 @@ module FakeS3
             <UploadId>#{ upload_id }</UploadId>
           </InitiateMultipartUploadResult>
         eos
+
+        bucket_obj = @store.get_bucket(s_req.bucket)
+        @store.store_object_metadata(bucket_obj, s_req.object, request)
+
       elsif query.has_key?('uploadId')
         upload_id  = query['uploadId'].first
         bucket_obj = @store.get_bucket(s_req.bucket)
