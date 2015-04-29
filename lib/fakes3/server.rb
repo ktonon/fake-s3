@@ -52,6 +52,13 @@ module FakeS3
       @root_hostnames = [hostname,'localhost','s3.amazonaws.com','s3.localhost']
     end
 
+    def validate_request(request)
+      req = request.webrick_request
+      return if req.nil?
+      return if not req.header.has_key?('expect')
+      req.continue if req.header['expect'].first=='100-continue'
+    end
+
     def do_GET(request, response)
       response['Access-Control-Allow-Origin'] = '*' if request['Origin']
       s_req = normalize_request(request)
@@ -93,6 +100,21 @@ module FakeS3
           return
         end
 
+        if_none_match = request["If-None-Match"]
+        if if_none_match == "\"#{real_obj.md5}\"" or if_none_match == "*"
+          response.status = 304
+          return
+        end
+
+        if_modified_since = request["If-Modified-Since"]
+        if if_modified_since
+          time = Time.httpdate(if_modified_since)
+          if time >= Time.iso8601(real_obj.modified_date)
+            response.status = 304
+            return
+          end
+        end
+
         response.status = 200
         response['Content-Type'] = real_obj.content_type
         stat = File::Stat.new(real_obj.io.path)
@@ -101,6 +123,7 @@ module FakeS3
         response.header['ETag'] = "\"#{real_obj.md5}\""
         response['Accept-Ranges'] = "bytes"
         response['Last-Ranges'] = "bytes"
+        response['Access-Control-Allow-Origin'] = '*'
 
         real_obj.custom_metadata.each do |header, value|
           response.header['x-amz-meta-' + header] = value
@@ -187,6 +210,9 @@ module FakeS3
         response.body = XmlAdapter.copy_object_result real_obj
       else
         bucket_obj  = @store.get_bucket(s_req.bucket)
+        if !bucket_obj
+          bucket_obj = @store.create_bucket(s_req.bucket)
+        end
         real_obj    = @store.store_object(
           bucket_obj, part_name,
           request
@@ -270,9 +296,8 @@ module FakeS3
 
       response['Content-Type']                  = 'text/xml'
       response['Access-Control-Allow-Origin']   = '*'
-      response['Access-Control-Allow-Headers']  = 'Authorization, Content-Length'
+      response['Access-Control-Allow-Headers']  = 'Authorization, Content-Length, Content-Type'
       response['Access-Control-Expose-Headers'] = 'ETag'
-
     end
 
     def do_DELETE(request,response)
@@ -293,9 +318,10 @@ module FakeS3
 
     def do_OPTIONS(request, response)
       super
+
       response['Access-Control-Allow-Origin']   = '*'
       response['Access-Control-Allow-Methods']  = 'PUT, POST, HEAD, GET, OPTIONS'
-      response['Access-Control-Allow-Headers']  = 'X-AMZ-ACL, X-AMZ-EXPIRES, X-AMZ-DATE, Authorization, Content-Length, Content-Type, ETag'
+      response['Access-Control-Allow-Headers']  = 'Accept, Content-Type, Authorization, Content-Length, ETag'
       response['Access-Control-Expose-Headers'] = 'ETag'
     end
 
@@ -447,6 +473,8 @@ module FakeS3
       else
         raise "Unknown Request"
       end
+
+      validate_request(s_req)
 
       return s_req
     end
