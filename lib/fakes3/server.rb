@@ -9,6 +9,7 @@ require 'fakes3/xml_adapter'
 require 'fakes3/bucket_query'
 require 'fakes3/unsupported_operation'
 require 'fakes3/errors'
+require 'uri'
 
 module FakeS3
   class Request
@@ -178,6 +179,13 @@ module FakeS3
 
       case s_req.type
       when Request::COPY
+        src_object = @store.get_object(s_req.src_bucket,s_req.src_object,request)
+        if !src_object
+          response.status = 404
+          response.body = XmlAdapter.error_no_such_key(s_req.src_object)
+          response['Content-Type'] = "application/xml"
+          return
+        end
         object = @store.copy_object(s_req.src_bucket,s_req.src_object,s_req.bucket,s_req.object,request)
         response.body = XmlAdapter.copy_object_result(object)
       when Request::STORE
@@ -426,7 +434,7 @@ module FakeS3
       # for multipart copy
       copy_source = webrick_req.header["x-amz-copy-source"]
       if copy_source and copy_source.size == 1
-        src_elems   = copy_source.first.split("/")
+        src_elems   = URI.unescape(copy_source.first).split("/")
         root_offset = src_elems[0] == "" ? 1 : 0
         s_req.src_bucket = src_elems[root_offset]
         s_req.src_object = src_elems[1 + root_offset,src_elems.size].join("/")
