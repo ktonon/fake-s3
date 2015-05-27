@@ -134,6 +134,10 @@ module FakeS3
           response['Content-Disposition'] = real_obj.content_disposition
         end
 
+        if s_req.query['response-content-disposition']
+          response['Content-Disposition'] = s_req.query['response-content-disposition']
+        end
+
         content_length = stat.size
 
         # Added Range Query support
@@ -384,9 +388,9 @@ module FakeS3
           elems = path.split("/")
         end
 
+        s_req.query = query
         if elems.size < 2
           s_req.type = Request::LS_BUCKET
-          s_req.query = query
         else
           if query["acl"] == ""
             s_req.type = Request::GET_ACL
