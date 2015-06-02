@@ -77,14 +77,20 @@ module FakeS3
       @bucket_hash.delete(bucket_name)
     end
 
+    def get_object_metadata(bucket_name, object_name)
+        obj_root = File.join(@root,bucket_name,object_name,SHUCK_METADATA_DIR)
+        return YAML.load(File.open(File.join(obj_root,"metadata"),'rb'))
+    end
+
     def get_object(bucket,object_name, request)
       begin
         real_obj = S3Object.new
         obj_root = File.join(@root,bucket,object_name,SHUCK_METADATA_DIR)
-        metadata = YAML.load(File.open(File.join(obj_root,"metadata"),'rb'))
+        metadata = get_object_metadata(bucket, object_name)
         real_obj.name = object_name
         real_obj.md5 = metadata[:md5]
         real_obj.content_type = metadata.fetch(:content_type) { "application/octet-stream" }
+        real_obj.content_disposition = metadata[:content_disposition]
         #real_obj.io = File.open(File.join(obj_root,"content"),'rb')
         real_obj.io = RateLimitableFile.open(File.join(obj_root,"content"),'rb')
         real_obj.size = metadata.fetch(:size) { 0 }
@@ -158,6 +164,7 @@ module FakeS3
 
     def store_object(bucket, object_name, request)
       filedata = ""
+      metadata_struct = nil
 
       # TODO put a tmpfile here first and mv it over at the end
       content_type = request.content_type || ""
@@ -173,14 +180,31 @@ module FakeS3
         end
 
         filedata = form_data['file']
+
+        metadata_struct = create_partial_metadata(request)
+        metadata_struct[:content_type] = form_data['Content-Type']
+        metadata_struct[:content_disposition] = form_data['Content-Disposition']
       else
         request.body { |chunk| filedata << chunk }
       end
 
-      do_store_object(bucket, object_name, filedata, request)
+      do_store_object(bucket, object_name, filedata, request, metadata_struct)
     end
 
-    def do_store_object(bucket, object_name, filedata, request)
+    def store_object_metadata(bucket, object_name, request)
+      filename = File.join(@root,bucket.name,object_name)
+      metadata_dir = File.join(filename,SHUCK_METADATA_DIR)
+      metadata_path = File.join(filename,SHUCK_METADATA_DIR,"metadata")
+
+      FileUtils.mkdir_p(metadata_dir)
+      metadata_struct = create_partial_metadata(request)
+
+      File.open(metadata_path,'w') do |f|
+        f << YAML::dump(metadata_struct)
+      end
+    end
+
+    def do_store_object(bucket, object_name, filedata, request, metadata_struct = nil)
       begin
         filename = File.join(@root,bucket.name,object_name)
         FileUtils.mkdir_p(filename)
@@ -193,7 +217,12 @@ module FakeS3
 
         File.open(content,'wb') { |f| f << filedata }
 
-        metadata_struct = create_metadata(content,request)
+        if metadata_struct == nil
+          metadata_struct = create_metadata(content,request)
+        else
+          metadata_struct = update_partial_metadata(metadata_struct, content, request)
+        end
+
         File.open(metadata,'w') do |f|
           f << YAML::dump(metadata_struct)
         end
@@ -234,7 +263,8 @@ module FakeS3
         part_paths    << part_path
       end
 
-      object = do_store_object(bucket, object_name, complete_file, request)
+      metadata = get_object_metadata(bucket.name, object_name)
+      object = do_store_object(bucket, object_name, complete_file, request, metadata)
 
       # clean up parts
       part_paths.each do |path|
@@ -262,6 +292,7 @@ module FakeS3
       metadata = {}
       metadata[:md5] = Digest::MD5.file(content).hexdigest
       metadata[:content_type] = request.header["content-type"].first
+      metadata[:content_disposition] = request.header["content-disposition"].first
       metadata[:size] = File.size(content)
       metadata[:modified_date] = File.mtime(content).utc.iso8601(SUBSECOND_PRECISION)
       metadata[:custom_metadata] = {}
@@ -275,5 +306,37 @@ module FakeS3
       end
       return metadata
     end
+
+    def create_partial_metadata(request)
+      metadata = {}
+      metadata[:content_type] = request.header["content-type"].first
+      metadata[:content_disposition] = request.header["content-disposition"].first
+      metadata[:custom_metadata] = {}
+
+      # Add custom metadata from the request header
+      request.header.each do |key, value|
+        match = /^x-amz-meta-(.*)$/.match(key)
+        if match && (match_key = match[1])
+          metadata[:custom_metadata][match_key] = value.join(', ')
+        end
+      end
+      return metadata
+    end
+
+    def update_partial_metadata(metadata, content,request)
+      metadata[:md5] = Digest::MD5.file(content).hexdigest
+      metadata[:size] = File.size(content)
+      metadata[:modified_date] = File.mtime(content).utc.iso8601(SUBSECOND_PRECISION)
+
+      # Add custom metadata from the request header
+      request.header.each do |key, value|
+        match = /^x-amz-meta-(.*)$/.match(key)
+        if match && (match_key = match[1])
+          metadata[:custom_metadata][match_key] = value.join(', ')
+        end
+      end
+      return metadata
+    end
+
   end
 end
